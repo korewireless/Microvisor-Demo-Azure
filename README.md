@@ -1,4 +1,4 @@
-# Microvisor MQTT Demo 1.0.0
+# Microvisor Azure MQTT Demo 1.0.0
 
 This repo provides a basic demonstration of a user application capable of working with Microvisor’s MQTT communications system calls. It has no hardware dependencies beyond the Twilio Microvisor Nucleo Development Board.
 
@@ -8,9 +8,21 @@ The [ARM CMSIS-RTOS API](https://github.com/ARM-software/CMSIS_5) is used as an 
 
 The application code files can be found in the [app_src/](app_src/) directory. The [ST_Code/](ST_Code/) directory contains required components that are not part of Twilio Microvisor STM32U5 HAL, which this sample accesses as a submodule. The `FreeRTOSConfig.h` and `stm32u5xx_hal_conf.h` configuration files are located in the [config/](config/) directory.
 
+This demo can be used to work with Azure IoT.
+
+We will:
+
+- Create a device in an Azure IoT Hub with a Symmetric key
+- Store the Symmetric in the secure configuration storage area on Microvisor cloud
+
+This demo does not currently show the following flows.  They should be fully supported via Azure IoT's MQTT support.
+
+- DPS provisioning of the device into a specific IoT Hub instance
+- X509 self-signed or CA signed certificate authentication (see also the Amazon AWS demonstration for certificate authentication examples)
+
 ## Release Notes
 
-Version 1.0.0 is the initial MQTT demo.
+Version 1.0.0 is the initial Azure demo.
 
 ## Actions
 
@@ -21,18 +33,73 @@ The code creates and runs four threads:
 - A work thread which consumes events and dispatches them in support of the configuration loading and managed MQTT broker operations.
 - An application thread which consumes data from an attached sensor (or demo source) and sends it to the work thread for publishing.
 
+# Azure IoT Hub configuration
+
+- Log into your Azure account at https://portal.azure.com/ , creating one if needed
+- Create or select an IoT Hub instance within Azure.  This can be a Free Tier IoT Hub.
+
+## Device configuration
+
+- Within the IoT Hub, select Device Management -> Devices
+- Select 'Add Device'
+- For Device ID, enter exactly your Microvisor device identifier SID (starts with UV...)
+- Select Authentication Type 'Symmetric Key', leave Auto-generate keys checked
+- Click 'Save'
+
+## Obtaining the Azure IoT Hub connection string
+
+- You may need to click 'Refresh' for the device to show up in the device list after creating it
+- Click on the device you created
+- Locate 'Primary connection string' on the page and click the Show/Hide Field Contents icon to view it or the Copy to Clipboard icon to copy it
+- Your connection string should look similar to: 'HostName=myhub.azure-devices.net;DeviceId=UV00000000000000000000000000000000;SharedAccessKey=QWhveSwgd29ybGQhCg=='
+
+## Storing the connection string in Microvisor cloud
+
+To facilitate your Microvisor device connecting, you wil need to provide the connection string to the device.  We recommend provisioning this as a device-scoped secret within Microvisor cloud so it is securely available to your device.
+
+You'll need your Microvisor device SID, Account SID, and account Auth Token - all of which are available at https://console.twilio.com/
+
+- Next, we will add configuration and secret items to Microvisor for this device
+
+        # First, we'll set an environment variable with the connection string and other required info to make the curl a bit cleaner in the next step:
+
+        export CONNECTION_STRING="HostName=myhub.azure-devices.net;DeviceId=UV00000000000000000000000000000000;SharedAccessKey=QWhveSwgd29ybGQhCg=="
+        export TWILIO_ACCOUNT_SID=AC00000000000000000000000000000000
+        export TWILIO_AUTH_TOKEN=.......
+        export MV_DEVICE_SID=UV00000000000000000000000000000000
+
+        curl --fail -X POST \
+                --data-urlencode "Key=azure-connection-string" \
+                --data-urlencode "Value=${CONNECTION_STRING}" \
+                --silent https://microvisor.twilio.com/v1/Devices/${MV_DEVICE_SID}/Secrets \
+                -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
+
+# The demo
+
+We use the connection string populated into the secrets store to generate shared access signature (SAS) tokens with an expiry.  We will be disconnected at the end of this expiration period and we'll generate a new SAS token and reconnect when this happens.
+
+Azure IoT Hub has specific requirements for MQTT access, the demo in this repository uses the following topics:
+
+Subscribes to: `devices/<device sid>/messages/devicebound/`
+
+Publishes to: `devices/<device sid>/messages/events/`
+
+Azure IoT MQTT requires MQTT 3.1.1, so be sure to configure the Microvisor managed MQTT client with protocol_version MV_MQTTPROTOCOLVERSION_V3_1_1 not MV_MQTTPROTOCOLVERSION_V5.
+
+More details about Azure IoT's MQTT implementation can be found [in the Azure IoT documentation](https://learn.microsoft.com/en-us/azure/iot-hub/iot-hub-mqtt-support).
+
 ## Cloning the Repo
 
 This repo makes uses of git submodules, some of which are nested within other submodules. To clone the repo, run:
 
 ```bash
-git clone https://github.com/twilio/twilio-microvisor-mqtt-demo.git
+git clone https://github.com/twilio/twilio-microvisor-azure-demo.git
 ```
 
 and then:
 
 ```bash
-cd twilio-microvisor-mqtt-demo
+cd twilio-microvisor-azure-demo
 git submodule update --init --recursive
 ```
 
@@ -63,7 +130,7 @@ This project is written in C. At this time, we only support Ubuntu 20.0.4. Users
 Build the image:
 
 ```shell
-docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mv-mqtt-demo-image .
+docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mv-azure-demo-image .
 ```
 
 Run the build:
@@ -71,7 +138,7 @@ Run the build:
 ```
 docker run -it --rm -v $(pwd)/:/home/mvisor/project/ \
   --env-file env.list \
-  --name mv-mqtt-demo mv-mqtt-demo-image
+  --name mv-azure-demo mv-azure-demo-image
 ```
 
 **Note** You will need to have exported certain environment variables, as [detailed below](#environment-variables).
@@ -83,12 +150,12 @@ Diagnosing crashes:
 ```
 docker run -it --rm -v $(pwd)/:/home/mvisor/project/ \
   --env-file env.list \
-  --name mv-mqtt-demo --entrypoint /bin/bash mv-mqtt-demo-image
+  --name mv-azure-demo --entrypoint /bin/bash mv-azure-demo-image
 ```
 
 To inspect useful info, to start with PC and LR:
 ```
-gdb-multiarch project/build/app/mv-mqtt-demo.elf
+gdb-multiarch project/build/app/mv-azure-demo.elf
 info symbol <...>
 ```
 
