@@ -21,6 +21,6 @@ WORKDIR /home/${USERNAME}/
 
 USER $USERNAME
 
-RUN twilio plugins:install "@twilio/plugin-microvisor@0.3.7"
+RUN twilio plugins:install "@twilio/plugin-microvisor"
 
 ENTRYPOINT ["./project/docker-entrypoint.sh"]
