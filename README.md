@@ -1,12 +1,12 @@
 # Microvisor Azure MQTT Demo 1.0.0
 
-This repo provides a basic demonstration of a user application capable of working with Microvisor’s MQTT communications system calls. It has no hardware dependencies beyond the Twilio Microvisor Nucleo Development Board.
+This repo provides a basic demonstration of a user application capable of working with Microvisor’s MQTT communications system calls. It has no hardware dependencies beyond the Microvisor Nucleo Development Board.
 
 It is based on the [FreeRTOS](https://freertos.org/) real-time operating system and which will run on the “non-secure” side of Microvisor. FreeRTOS is included as a submodule.
 
 The [ARM CMSIS-RTOS API](https://github.com/ARM-software/CMSIS_5) is used as an intermediary between the application and FreeRTOS to make it easier to swap out the RTOS layer for another.
 
-The application code files can be found in the [app_src/](app_src/) directory. The [ST_Code/](ST_Code/) directory contains required components that are not part of Twilio Microvisor STM32U5 HAL, which this sample accesses as a submodule. The `FreeRTOSConfig.h` and `stm32u5xx_hal_conf.h` configuration files are located in the [config/](config/) directory.
+The application code files can be found in the [app_src/](app_src/) directory. The [ST_Code/](ST_Code/) directory contains required components that are not part of the Microvisor STM32U5 HAL, which this sample accesses as a submodule. The `FreeRTOSConfig.h` and `stm32u5xx_hal_conf.h` configuration files are located in the [config/](config/) directory.
 
 This demo can be used to work with Azure IoT.
 
@@ -15,7 +15,7 @@ We will:
 - Create a device in an Azure IoT Hub with a Symmetric key
 - Store the Symmetric in the secure configuration storage area on Microvisor cloud
 
-This demo does not currently show the following flows.  They should be fully supported via Azure IoT's MQTT support.
+This demo does not currently show the following flows. They should be fully supported via Azure IoT's MQTT support.
 
 - DPS provisioning of the device into a specific IoT Hub instance
 - X509 self-signed or CA signed certificate authentication (see also the Amazon AWS demonstration for certificate authentication examples)
@@ -28,55 +28,55 @@ Version 1.0.0 is the initial Azure demo.
 
 The code creates and runs four threads:
 
-- A thread periodically toggles GPIO A5, which is the user LED on the [Microvisor Nucleo Development Board](https://www.twilio.com/docs/iot/microvisor/microvisor-nucleo-development-board).  This acts as a heartbeat to let you know the demo is working.
+- A thread periodically toggles GPIO A5, which is the user LED on the [Microvisor Nucleo Development Board](https://www.twilio.com/docs/iot/microvisor/microvisor-nucleo-development-board). This acts as a heartbeat to let you know the demo is working.
 - A thread manages the network state of your application, requesting control of the network from Microvisor.
 - A work thread which consumes events and dispatches them in support of the configuration loading and managed MQTT broker operations.
 - An application thread which consumes data from an attached sensor (or demo source) and sends it to the work thread for publishing.
 
 # Azure IoT Hub configuration
 
-- Log into your Azure account at https://portal.azure.com/ , creating one if needed
-- Create or select an IoT Hub instance within Azure.  This can be a Free Tier IoT Hub.
+- Log into your Azure account at https://portal.azure.com/ , creating one if needed.
+- Create or select an IoT Hub instance within Azure. This can be a Free Tier IoT Hub.
 
 ## Device configuration
 
-- Within the IoT Hub, select Device Management -> Devices
-- Select 'Add Device'
-- For Device ID, enter exactly your Microvisor device identifier SID (starts with UV...)
-- Select Authentication Type 'Symmetric Key', leave Auto-generate keys checked
-- Click 'Save'
+- Within the IoT Hub, select **Device Management > Devices**.
+- Select **Add Device**.
+- For **Device ID**, enter exactly your Microvisor device identifier SID (starts with `UV`).
+- Select **Authentication Type 'Symmetric Key'**, leave **Auto-generate keys** checked.
+- Click **Save**.
 
 ## Obtaining the Azure IoT Hub connection string
 
-- You may need to click 'Refresh' for the device to show up in the device list after creating it
-- Click on the device you created
-- Locate 'Primary connection string' on the page and click the Show/Hide Field Contents icon to view it or the Copy to Clipboard icon to copy it
-- Your connection string should look similar to: 'HostName=myhub.azure-devices.net;DeviceId=UV00000000000000000000000000000000;SharedAccessKey=QWhveSwgd29ybGQhCg=='
+- You may need to click **Refresh** for the device to show up in the device list after creating it.
+- Click on the device you created.
+- Locate **Primary connection string**  on the page and click the **Show/Hide Field Contents** icon to view it or the **Copy to Clipboard** icon to copy it.
+- Your connection string should look something like: `HostName=myhub.azure-devices.net;DeviceId=UV00000000000000000000000000000000;SharedAccessKey=QWhveSwgd29ybGQhCg==`
 
 ## Storing the connection string in Microvisor cloud
 
-To facilitate your Microvisor device connecting, you wil need to provide the connection string to the device.  We recommend provisioning this as a device-scoped secret within Microvisor cloud so it is securely available to your device.
+To facilitate your Microvisor device connecting, you wil need to provide the connection string to the device. We recommend provisioning this as a device-scoped secret within Microvisor cloud so it is securely available to your device.
 
-You'll need your Microvisor device SID, Account SID, and account Auth Token - all of which are available at https://console.twilio.com/
+You'll need your Microvisor device SID, Account SID, and account Auth Token, all of which are available at https://console.twilio.com/
 
-- Next, we will add configuration and secret items to Microvisor for this device
+- Next, we will add configuration and secret items to Microvisor for this device. First, we'll set an environment variable with the connection string and other required info to make the curl a bit cleaner in the next step:
 
-        # First, we'll set an environment variable with the connection string and other required info to make the curl a bit cleaner in the next step:
+```shell
+export CONNECTION_STRING="HostName=myhub.azure-devices.net;DeviceId=UV00000000000000000000000000000000;SharedAccessKey=QWhveSwgd29ybGQhCg=="
+export TWILIO_ACCOUNT_SID=AC00000000000000000000000000000000
+export TWILIO_AUTH_TOKEN=.......
+export MV_DEVICE_SID=UV00000000000000000000000000000000
 
-        export CONNECTION_STRING="HostName=myhub.azure-devices.net;DeviceId=UV00000000000000000000000000000000;SharedAccessKey=QWhveSwgd29ybGQhCg=="
-        export TWILIO_ACCOUNT_SID=AC00000000000000000000000000000000
-        export TWILIO_AUTH_TOKEN=.......
-        export MV_DEVICE_SID=UV00000000000000000000000000000000
-
-        curl --fail -X POST \
-                --data-urlencode "Key=azure-connection-string" \
-                --data-urlencode "Value=${CONNECTION_STRING}" \
-                --silent https://microvisor.twilio.com/v1/Devices/${MV_DEVICE_SID}/Secrets \
-                -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
+curl --fail -X POST \
+        --data-urlencode "Key=azure-connection-string" \
+        --data-urlencode "Value=${CONNECTION_STRING}" \
+        --silent https://microvisor.twilio.com/v1/Devices/${MV_DEVICE_SID}/Secrets \
+        -u ${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}
+```
 
 # The demo
 
-We use the connection string populated into the secrets store to generate shared access signature (SAS) tokens with an expiry.  We will be disconnected at the end of this expiration period and we'll generate a new SAS token and reconnect when this happens.
+We use the connection string populated into the secrets store to generate shared access signature (SAS) tokens with an expiry. We will be disconnected at the end of this expiration period and we'll generate a new SAS token and reconnect when this happens.
 
 Azure IoT Hub has specific requirements for MQTT access, the demo in this repository uses the following topics:
 
@@ -93,31 +93,20 @@ More details about Azure IoT's MQTT implementation can be found [in the Azure Io
 This repo makes uses of git submodules, some of which are nested within other submodules. To clone the repo, run:
 
 ```bash
-git clone https://github.com/twilio/twilio-microvisor-azure-demo.git
+git clone --recurse-submodules https://github.com/twilio/twilio-microvisor-azure-demo.git
 ```
 
 and then:
 
 ```bash
 cd twilio-microvisor-azure-demo
-git submodule update --init --recursive
 ```
-
-## Repo Updates
-
-When the repo is updated, and you pull the changes, you should also always update dependency submodules. To do so, run:
-
-```bash
-git submodule update --remote --recursive
-```
-
-We recommend following this by deleting your `build` directory.
 
 ## Requirements
 
 You will need a Twilio account. [Sign up now if you don’t have one](https://www.twilio.com/try-twilio).
 
-You will also need a Twilio Microvisor [Nucleo Development Board](https://www.twilio.com/docs/iot/microvisor/microvisor-nucleo-development-board). These are currently only available to Beta Program participants: [Join the Beta](https://interactive.twilio.com/iot-microvisor-private-beta-sign-up?utm_source=github&utm_medium=github&utm_campaign=IOT&utm_content=MQTT_GitHub_Demo).
+You will also need a [Microvisor Nucleo Development Board](https://www.twilio.com/docs/iot/microvisor/microvisor-nucleo-development-board). These are currently only available to Beta Program participants: [Join the Beta](https://www.korewireless.com/mv-signup).
 
 ## Software Setup
 
@@ -135,7 +124,7 @@ docker build --build-arg UID=$(id -u) --build-arg GID=$(id -g) -t mv-azure-demo-
 
 Run the build:
 
-```
+```shell
 docker run -it --rm -v $(pwd)/:/home/mvisor/project/ \
   --env-file env.list \
   --name mv-azure-demo mv-azure-demo-image
@@ -147,14 +136,15 @@ Under Docker, the demo is compiled, uploaded and deployed to your development bo
 
 Diagnosing crashes:
 
-```
-docker run -it --rm -v $(pwd)/:/home/mvisor/project/ \
+```shell
+docker run -it --rm -v $(pwd)/:/home/mvisor/project/ \dock
   --env-file env.list \
   --name mv-azure-demo --entrypoint /bin/bash mv-azure-demo-image
 ```
 
 To inspect useful info, to start with PC and LR:
-```
+
+```shell
 gdb-multiarch project/build/app/mv-azure-demo.elf
 info symbol <...>
 ```
@@ -166,8 +156,8 @@ info symbol <...>
 Under Ubuntu, run the following:
 
 ```bash
-sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi \
-  git curl build-essential cmake libsecret-1-dev jq openssl
+sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi git curl \
+  build-essential cmake libsecret-1-dev jq openssl gdb-multiarch
 ```
 
 #### Twilio CLI
@@ -202,11 +192,7 @@ export MV_DEVICE_SID=UVxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 You can get the first two from your Twilio Console [account dashboard](https://console.twilio.com/).
 
-Enter the following command to get your target device’s SID and, if set, its unqiue name:
-
-```bash
-twilio api:microvisor:v1:devices:list
-```
+The third value can be found in the [**Iot > Microvisor > Devices** section](https://console.twilio.com/us1/develop/iot/microvisor/devices). It is also accessible via the QR code on the back of your development board. Scan the code with your mobile phone and a suitable app, and the board’s SID is the third `/`-separated field.
 
 ## Build and Deploy the Application
 
@@ -224,10 +210,10 @@ The `--log` flag initiates log-streaming.
 
 Multiple applications are supported in the demo. Right now the two applications implemented are
 
-    - `dummy` - send dummy temperature data once a second
-    - `temperature` - send real temperature read from TH02 sensor
+- `dummy` - send dummy temperature data once a second
+- `temperature` - send real temperature read from TH02 sensor
 
-You can choose what application to build by providing `--application` argument to `deploy.sh`
+You can choose what application to build by providing `--application` argument to `deploy.sh`:
 
 ```bash
 ./deploy.sh --application temperature --log
@@ -277,9 +263,9 @@ You will need to pass the path to the private key to the Twilio CLI Microvisor p
 
 ## Copyright and Licensing
 
-The sample code and Microvisor SDK is © 2022, Twilio, Inc. It is licensed under the terms of the [Apache 2.0 License](./LICENSE).
+The sample code and Microvisor SDK is © 2022-23, KORE Wireless. It is licensed under the terms of the [Apache 2.0 License](./LICENSE).
 
-The SDK makes used of code © 2021, STMicroelectronics and affiliates. This code is licensed under terms described in [this file](https://github.com/twilio/twilio-microvisor-hal-stm32u5/blob/main/LICENSE-STM32CubeU5.md).
+The SDK makes used of code © 2021, STMicroelectronics and affiliates. This code is licensed under terms described in [this file](https://github.com/korewireless/Microvisor-HAL-STM32U5/blob/main/LICENSE-STM32CubeU5.md).
 
 The SDK makes use [ARM CMSIS](https://github.com/ARM-software/CMSIS_5) © 2004, ARM. It is licensed under the terms of the [Apache 2.0 License](./LICENSE).
 
